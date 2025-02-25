@@ -4,7 +4,8 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const router = express.Router();
-const cookieParser = require('cookie-parser'); const prisma = new PrismaClient();
+const cookieParser = require('cookie-parser'); 
+const prisma = new PrismaClient();
 router.use(cookieParser());
 const cors = require("cors");
 
