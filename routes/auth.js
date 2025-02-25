@@ -4,31 +4,33 @@ const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const router = express.Router();
-const  cookieParser = require('cookie-parser');const prisma = new PrismaClient();
+const cookieParser = require('cookie-parser'); const prisma = new PrismaClient();
 router.use(cookieParser());
 const cors = require("cors");
 
 const allowedOrigins = [
-    process.env.CLIENT_URL,
-    process.env.EXTENSION_CLIENT_URL
-];
+    process.env.CLIENT_URL,        
+    process.env.EXTENSION_CLIENT_URL 
+].filter(Boolean);
 
 router.use(
     cors({
         origin: function (origin, callback) {
             if (!origin || allowedOrigins.includes(origin)) {
-                callback(null, true);
+                callback(null, origin || true); // Reflect allowed origin or allow no-origin requests
             } else {
                 callback(new Error("Not allowed by CORS"));
             }
         },
-        credentials: true, // Allow cookies to be sent
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
     })
 );
 
 const authenticateUser = (req, res, next) => {
     const token = req.cookies.token; // Read token from cookie
-
+    console.log("Token: ", token);
     if (!token) return res.status(401).json({ message: "Unauthorized" });
 
     try {
@@ -41,7 +43,6 @@ const authenticateUser = (req, res, next) => {
 };
 
 router.get("/authenticate", authenticateUser, (req, res) => {
-    console.log("Received authentication request");
     res.json({ isAuthenticated: true, userId: req.user.userId });
 });
 
@@ -111,7 +112,8 @@ router.post("/login", async (req, res) => {
     }
 });
 
-router.post("/logout", (req, res) => {
+router.get("/logout", (req, res) => {
+    console.log("Logout request received");
     res.clearCookie("token");
     res.json({ message: "Logged out successfully" });
 });
