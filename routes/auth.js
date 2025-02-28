@@ -8,6 +8,7 @@ const cookieParser = require('cookie-parser');
 const prisma = new PrismaClient();
 router.use(cookieParser());
 const cors = require("cors");
+const authenticateUser = require("../middleware/authenticateUser");
 
 const allowedOrigins = [
     process.env.CLIENT_URL,        
@@ -28,20 +29,6 @@ router.use(
         allowedHeaders: ["Content-Type", "Authorization"],
     })
 );
-
-const authenticateUser = (req, res, next) => {
-    const token = req.cookies.token; // Read token from cookie
-    console.log("Token: ", token);
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; // Attach user info to request
-        next();
-    } catch (err) {
-        res.status(401).json({ message: "Invalid token" });
-    }
-};
 
 router.get("/authenticate", authenticateUser, (req, res) => {
     res.json({ isAuthenticated: true, userId: req.user.userId });
