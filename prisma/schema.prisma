@@ -20,6 +20,7 @@ model Meeting {
   title       String
   recordingurl String    
   transcripturl String? 
+  summarizationurl String?
   users       MeetingUser[]
 }
 

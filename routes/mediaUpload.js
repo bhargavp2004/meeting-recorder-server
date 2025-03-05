@@ -18,6 +18,7 @@ const minioClient = new Minio.Client({
 
 const RECORDING_BUCKET_NAME = process.env.MINIO_RECORDING_BUCKET_NAME;
 const TRANSCRIPTION_BUCKET_NAME = process.env.MINIO_TRANSCRIPTION_BUCKET_NAME;
+const SUMMARIZATION_BUCKET_NAME = process.env.MINIO_SUMMARIZATION_BUCKET_NAME;
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -127,6 +128,36 @@ router.post("/upload-transcription/:meetingId", authenticateUser, upload.single(
     } catch (error) {
         console.error("MinIO Upload Error:", error);
         return res.status(500).json({ error: "Failed to upload transcription" });
+    }
+});
+
+router.post("/upload-summarization/:meetingId", authenticateUser, upload.single("summarization"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const filename = `${req.file.originalname}`;
+    const fileBuffer = req.file.buffer;
+    const { meetingId } = req.params;
+
+    try {
+        await minioClient.putObject(
+            SUMMARIZATION_BUCKET_NAME,
+            filename,
+            fileBuffer,
+            req.file.size,
+            { "Content-Type": req.file.mimetype }
+        );
+
+        const summarizationUrl = `${process.env.MINIO_PUBLIC_URL}/${SUMMARIZATION_BUCKET_NAME}/${filename}`;
+
+        await prisma.meeting.update({
+            where: { id: meetingId },
+            data: { summarizationurl : summarizationUrl },
+        });
+        console.log("Summarization uploaded successfully!");
+        return res.json({ message: "Summarization uploaded successfully", summarizationUrl });
+    } catch (error) {
+        console.error("MinIO Upload Error:", error);
+        return res.status(500).json({ error: "Failed to upload summarization" });
     }
 });
 
