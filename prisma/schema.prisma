@@ -21,6 +21,7 @@ model Meeting {
   recordingurl String    
   transcripturl String? 
   summarizationurl String?
+  createdAt DateTime @default(now())
   users       MeetingUser[]
 }
 

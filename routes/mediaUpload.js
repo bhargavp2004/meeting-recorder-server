@@ -69,6 +69,9 @@ router.post("/upload-video", authenticateUser, upload.single("video"), async (re
     const fileBuffer = req.file.buffer;
     const userId = req.user.userId;
 
+    const { meetingId } = req.body;
+    console.log("Meeting id : ", meetingId);
+
     try {
         await minioClient.putObject(
             RECORDING_BUCKET_NAME,
@@ -151,7 +154,7 @@ router.post("/upload-summarization/:meetingId", authenticateUser, upload.single(
 
         await prisma.meeting.update({
             where: { id: meetingId },
-            data: { summarizationurl : summarizationUrl },
+            data: { summarizationurl: summarizationUrl },
         });
         console.log("Summarization uploaded successfully!");
         return res.json({ message: "Summarization uploaded successfully", summarizationUrl });
@@ -159,6 +162,45 @@ router.post("/upload-summarization/:meetingId", authenticateUser, upload.single(
         console.error("MinIO Upload Error:", error);
         return res.status(500).json({ error: "Failed to upload summarization" });
     }
+});
+
+router.get("/meetings", async (req, res) => {
+    try {
+        const meetings = await prisma.meeting.findMany({
+            include: { users: true },
+        });
+
+        return res.json(meetings);
+    } catch (error) {
+        console.error("Database Error:", error);
+        return res.status(500).json({ error: "Failed to fetch meetings" });
+    }
+});
+
+router.get('/meetings/:meetingId/video', authenticateUser, async (req, res) => {
+    const meetingId = req.params.meetingId;
+    // Fetch video URL from the database or storage
+    const meeting = await prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { recordingurl: true },
+    });
+
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    res.json({ videoUrl: meeting.recordingurl });
+});
+
+router.get('/meetings/:meetingId/transcription', authenticateUser, async (req, res) => {
+    const meetingId = req.params.meetingId;
+    // Fetch transcription URL from the database or storage
+    const meeting = await prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { transcripturl: true },
+    });
+
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    res.json({ transcriptionUrl: meeting.transcripturl });
 });
 
 router.get("/meeting/:meetingId", async (req, res) => {
