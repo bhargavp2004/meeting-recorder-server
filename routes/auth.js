@@ -34,22 +34,24 @@ router.get("/authenticate", authenticateUser, (req, res) => {
     res.json({ isAuthenticated: true, userId: req.user.userId });
 });
 
-// Register User
 router.post("/register", async (req, res) => {
     console.log("Register request received");
     try {
         const { email, password, username } = req.body;
 
-        // Check if user already exists
-        const existingUser = await prisma.user.findFirst({
-            where: {
-            OR: [
-                { email },
-                { username }
-            ]
-            }
-        });
-        if (existingUser) return res.status(400).json({ message: "User already exists" });
+        // Check if user already exists with username
+        const existingUsername = await prisma.user.findFirst({ where: { username } });
+
+        // Check if user already exists with email
+        const existingEmail = await prisma.user.findFirst({ where: { email } });
+
+        if(existingUsername && existingEmail) {
+            return res.status(400).json({ message: "Username and Email already exists" });
+        } else if (existingUsername) {
+            return res.status(400).json({ message: "Username already exists" });
+        } else if (existingEmail) {
+            return res.status(400).json({ message: "Email already exists" });
+        }
 
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -65,8 +67,8 @@ router.post("/register", async (req, res) => {
         // Set token in an httpOnly cookie
         res.cookie("token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // Use secure cookies in production
-            sameSite: "None", // Adjust if needed
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "None", 
         });
 
         res.status(201).json({ message: "User registered successfully", userId: newUser.id });
