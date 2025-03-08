@@ -69,8 +69,8 @@ router.post("/upload-video", authenticateUser, upload.single("video"), async (re
     const fileBuffer = req.file.buffer;
     const userId = req.user.userId;
 
-    const { meetingId } = req.body;
-    console.log("Meeting id : ", meetingId);
+    const { title } = req.body;
+    console.log("Title : ", title);
 
     try {
         await minioClient.putObject(
@@ -85,7 +85,7 @@ router.post("/upload-video", authenticateUser, upload.single("video"), async (re
 
         const meeting = await prisma.meeting.create({
             data: {
-                title: filename,
+                title: title,
                 recordingurl: videoUrl,
             },
         });

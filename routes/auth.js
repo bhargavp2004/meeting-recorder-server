@@ -38,10 +38,17 @@ router.get("/authenticate", authenticateUser, (req, res) => {
 router.post("/register", async (req, res) => {
     console.log("Register request received");
     try {
-        const { email, password } = req.body;
+        const { email, password, username } = req.body;
 
         // Check if user already exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        const existingUser = await prisma.user.findFirst({
+            where: {
+            OR: [
+                { email },
+                { username }
+            ]
+            }
+        });
         if (existingUser) return res.status(400).json({ message: "User already exists" });
 
         // Hash password
@@ -49,7 +56,7 @@ router.post("/register", async (req, res) => {
 
         // Create user in database
         const newUser = await prisma.user.create({
-            data: { email, password: hashedPassword },
+            data: { email, username, password: hashedPassword },
         });
 
         // Generate JWT token
