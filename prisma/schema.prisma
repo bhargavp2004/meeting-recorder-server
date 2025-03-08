@@ -12,5 +12,24 @@ model User {
   email    String @unique
   password String
   createdAt DateTime @default(now())
+  meetings  MeetingUser[]
 }
 
+model Meeting {
+  id          String    @id @default(uuid())  
+  title       String
+  recordingurl String    
+  transcripturl String? 
+  summarizationurl String?
+  createdAt DateTime @default(now())
+  users       MeetingUser[]
+}
+
+model MeetingUser {
+  id        String   @id @default(uuid())  
+  userId    String
+  meetingId String
+  user      User     @relation(fields: [userId], references: [id])
+  meeting   Meeting  @relation(fields: [meetingId], references: [id])
+  @@unique([userId, meetingId])
+}
