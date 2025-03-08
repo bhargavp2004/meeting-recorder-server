@@ -1,3 +1,5 @@
 node_modules
 # Keep environment variables out of version control
 .env
+# Ignore the Prisma schema file that is updated automatically
+/prisma/migrations

@@ -1,2 +1,2 @@
-Prisma migration : npx prisma --dev migrate {message}
+Prisma migration : npx prisma migrate dev {message}
 MINIO : .\minio.exe server C:\minio --console-address :9001
