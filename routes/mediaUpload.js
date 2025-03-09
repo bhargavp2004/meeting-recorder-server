@@ -165,8 +165,18 @@ router.post("/upload-summarization/:meetingId", authenticateUser, upload.single(
 });
 
 router.get("/meetings", async (req, res) => {
+    const { title } = req.query; // Extract title from query params
+
     try {
         const meetings = await prisma.meeting.findMany({
+            where: title
+                ? {
+                      title: {
+                          contains: title,
+                          mode: "insensitive",
+                      }
+                  }
+                : {},
             include: { users: true },
         });
 
