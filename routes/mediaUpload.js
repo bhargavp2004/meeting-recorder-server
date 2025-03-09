@@ -213,6 +213,19 @@ router.get('/meetings/:meetingId/transcription', authenticateUser, async (req, r
     res.json({ transcriptionUrl: meeting.transcripturl });
 });
 
+router.get('/meetings/:meetingId/summarization', authenticateUser, async (req, res) => {
+    const meetingId = req.params.meetingId;
+    // Fetch transcription URL from the database or storage
+    const meeting = await prisma.meeting.findUnique({
+        where: { id: meetingId },
+        select: { summarizationurl: true },
+    });
+
+    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+
+    res.json({ summarizationUrl: meeting.summarizationurl });
+});
+
 router.get("/meeting/:meetingId", async (req, res) => {
     const { meetingId } = req.params;
 
