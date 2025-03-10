@@ -187,61 +187,72 @@ router.get("/meetings", async (req, res) => {
     }
 });
 
-router.get('/meetings/:meetingId/video', authenticateUser, async (req, res) => {
+router.get('/meetings/:meetingId', authenticateUser, async (req, res) => {
     const meetingId = req.params.meetingId;
-    // Fetch video URL from the database or storage
-    const meeting = await prisma.meeting.findUnique({
-        where: { id: meetingId },
-        select: { recordingurl: true },
-    });
-
-    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
-
-    res.json({ videoUrl: meeting.recordingurl });
-});
-
-router.get('/meetings/:meetingId/transcription', authenticateUser, async (req, res) => {
-    const meetingId = req.params.meetingId;
-    // Fetch transcription URL from the database or storage
-    const meeting = await prisma.meeting.findUnique({
-        where: { id: meetingId },
-        select: { transcripturl: true },
-    });
-
-    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
-
-    res.json({ transcriptionUrl: meeting.transcripturl });
-});
-
-router.get('/meetings/:meetingId/summarization', authenticateUser, async (req, res) => {
-    const meetingId = req.params.meetingId;
-    // Fetch transcription URL from the database or storage
-    const meeting = await prisma.meeting.findUnique({
-        where: { id: meetingId },
-        select: { summarizationurl: true },
-    });
-
-    if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
-
-    res.json({ summarizationUrl: meeting.summarizationurl });
-});
-
-router.get("/meeting/:meetingId", async (req, res) => {
-    const { meetingId } = req.params;
 
     try {
         const meeting = await prisma.meeting.findUnique({
             where: { id: meetingId },
-            include: { users: true },
+            include: {
+                users: {
+                    include: {
+                        user: {
+                            select: {
+                                username: true
+                            }
+                        }
+                    }
+                }
+            }
         });
 
-        if (!meeting) return res.status(404).json({ error: "Meeting not found" });
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
 
-        return res.json(meeting);
+        const usernames = meeting.users.map(meetingUser => meetingUser.user.username);
+
+        return res.json({ meeting, accessList: usernames });
     } catch (error) {
-        console.error("Database Error:", error);
-        return res.status(500).json({ error: "Failed to fetch meeting details" });
+        console.error('Database Error:', error);
+        return res.status(500).json({ error: 'Failed to fetch meeting details' });
     }
 });
+
+router.put('/meetings/:meetingId', authenticateUser, async (req, res) => {
+    const { meetingId } = req.params;
+    const { title } = req.body;
+
+    try {
+        const updatedMeeting = await prisma.meeting.update({
+            where: { id: meetingId },
+            data: { title },
+        });
+
+        return res.json({ message: 'Meeting updated successfully', updatedMeeting });
+    } catch (error) {
+        console.error('Database Error:', error);
+        return res.status(500).json({ error: 'Failed to update meeting' });
+    }
+});
+
+router.delete('/meetings/:meetingId', authenticateUser, async (req, res) => {
+    const { meetingId } = req.params;
+
+    try {
+        // Delete related MeetingUser entries first
+        await prisma.meetingUser.deleteMany({
+            where: { meetingId },
+        });
+
+        // Delete the meeting
+        await prisma.meeting.delete({
+            where: { id: meetingId },
+        });
+
+        return res.json({ message: 'Meeting deleted successfully' });
+    } catch (error) {
+        console.error('Database Error:', error);
+        return res.status(500).json({ error: 'Failed to delete meeting' });
+    }
+}); 
 
 module.exports = router;
