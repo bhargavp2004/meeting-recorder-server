@@ -165,25 +165,58 @@ router.post("/upload-summarization/:meetingId", authenticateUser, upload.single(
 });
 
 router.get("/meetings", async (req, res) => {
-    const { title } = req.query; // Extract title from query params
+    const { title, email } = req.query;
+
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
 
     try {
+        // Step 1: Fetch all entries from `meetingUser`
+        const meetingUsers = await prisma.meetingUser.findMany({
+            include: { user: true } // Include user data to filter by email
+        });
+
+        // Step 2: Filter users with the given email
+        const filteredMeetingUsers = meetingUsers.filter((mu) => mu.user.email === email);
+
+        // Step 3: Extract unique meeting IDs
+        const meetingIds = [...new Set(filteredMeetingUsers.map((mu) => mu.meetingId))];
+
+        // Step 4: Fetch meetings with the filtered IDs
         const meetings = await prisma.meeting.findMany({
-            where: title
-                ? {
-                      title: {
-                          contains: title,
-                          mode: "insensitive",
-                      }
-                  }
-                : {},
-            include: { users: true },
+            where: {
+                id: { in: meetingIds },
+                ...(title && {
+                    title: {
+                        contains: title,
+                        mode: "insensitive"
+                    }
+                })
+            },
+            include: { users: true }
         });
 
         return res.json(meetings);
     } catch (error) {
         console.error("Database Error:", error);
         return res.status(500).json({ error: "Failed to fetch meetings" });
+    }
+});
+
+router.get("/meeting-users", async (req, res) => {
+    try {
+        const meetingUsers = await prisma.meetingUser.findMany({
+            include: {
+                meeting: true,
+                user: true
+            }
+        });
+
+        return res.json(meetingUsers);
+    } catch (error) {
+        console.error("Database Error:", error);
+        return res.status(500).json({ error: "Failed to fetch meeting users" });
     }
 });
 
