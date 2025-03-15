@@ -34,6 +34,18 @@ router.get("/authenticate", authenticateUser, (req, res) => {
     res.json({ isAuthenticated: true, userId: req.user.userId });
 });
 
+router.get("/getUserInfo", authenticateUser, async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.userId },
+            select: { id: true, email: true, username: true },
+        });
+        res.status(200).json(user);
+    } catch (err) {
+        res.status(500).json({ message: "Server Error", error: err.message });
+    }
+});
+
 router.post("/register", async (req, res) => {
     console.log("Register request received");
     try {

@@ -204,6 +204,115 @@ router.get("/meetings", async (req, res) => {
     }
 });
 
+// router.post('/grant-access', authenticateUser, async (req, res) => {
+//     const { emails, meetingId } = req.body;
+
+//     console.log("Emails received to grant access : ", emails);
+    
+//     if (!emails || !Array.isArray(emails) || emails.length === 0) {
+//         return res.status(400).json({ error: 'Emails array is required' });
+//     }
+
+//     try {
+//         const users = await prisma.user.findMany({
+//             where: { email: { in: emails } }
+//         });
+
+//         if (users.length === 0) {
+//             return res.status(404).json({ error: 'No users found with the provided emails' });
+//         }
+
+//         // Fetch existing meeting users
+//         const existingMeetingUsers = await prisma.meetingUser.findMany({
+//             where: { meetingId }
+//         });
+
+//         const existingUserIds = existingMeetingUsers.map(mu => mu.userId);
+
+//         // Filter out users who already have access
+//         const newUsers = users.filter(user => !existingUserIds.includes(user.id));
+
+//         if (newUsers.length === 0) {
+//             return res.status(400).json({ error: 'All provided users already have access' });
+//         }
+
+//         const meetingUsersData = newUsers.map(user => ({
+//             userId: user.id,
+//             meetingId
+//         }));
+
+//         await prisma.meetingUser.createMany({
+//             data: meetingUsersData,
+//             skipDuplicates: true
+//         });
+
+//         return res.json({ message: 'Access granted successfully' });
+//     } catch (error) {
+//         console.error('Database Error:', error);
+//         return res.status(500).json({ error: 'Failed to grant access' });
+//     }
+// });
+
+router.post('/grant-access', authenticateUser, async (req, res) => {
+    const { emails, meetingId } = req.body;
+
+    if (!emails || !Array.isArray(emails)) {
+        return res.status(400).json({ error: 'Emails array is required' });
+    }
+
+    try {
+        // Fetch users corresponding to the provided emails
+        const users = await prisma.user.findMany({
+            where: { email: { in: emails } },
+            select: { id: true }
+        });
+
+        const newUserIds = users.map(user => user.id);
+
+        // Fetch current meeting users from DB
+        const existingMeetingUsers = await prisma.meetingUser.findMany({
+            where: { meetingId },
+            select: { userId: true }
+        });
+
+        const existingUserIds = existingMeetingUsers.map(mu => mu.userId);
+
+        // Users to be added (newly granted access)
+        const usersToAdd = newUserIds.filter(userId => !existingUserIds.includes(userId));
+
+        // Users to be removed (no longer in the provided list)
+        const usersToRemove = existingUserIds.filter(userId => !newUserIds.includes(userId));
+
+        // Add new users
+        if (usersToAdd.length > 0) {
+            const meetingUsersData = usersToAdd.map(userId => ({
+                userId,
+                meetingId
+            }));
+
+            await prisma.meetingUser.createMany({
+                data: meetingUsersData,
+                skipDuplicates: true
+            });
+        }
+
+        // Remove users who are no longer in the provided email list
+        if (usersToRemove.length > 0) {
+            await prisma.meetingUser.deleteMany({
+                where: {
+                    meetingId,
+                    userId: { in: usersToRemove }
+                }
+            });
+        }
+
+        return res.json({ message: 'Access updated successfully' });
+    } catch (error) {
+        console.error('Database Error:', error);
+        return res.status(500).json({ error: 'Failed to update access' });
+    }
+});
+
 router.get("/meeting-users", async (req, res) => {
     try {
         const meetingUsers = await prisma.meetingUser.findMany({
@@ -231,7 +340,8 @@ router.get('/meetings/:meetingId', authenticateUser, async (req, res) => {
                     include: {
                         user: {
                             select: {
-                                username: true
+                                username: true,
+                                email: true
                             }
                         }
                     }
@@ -241,9 +351,12 @@ router.get('/meetings/:meetingId', authenticateUser, async (req, res) => {
 
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
 
-        const usernames = meeting.users.map(meetingUser => meetingUser.user.username);
+        const accessList = meeting.users.map(meetingUser => ({
+            username: meetingUser.user.username,
+            email: meetingUser.user.email
+        }));
 
-        return res.json({ meeting, accessList: usernames });
+        return res.json({ meeting, accessList });
     } catch (error) {
         console.error('Database Error:', error);
         return res.status(500).json({ error: 'Failed to fetch meeting details' });
