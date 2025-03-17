@@ -328,17 +328,35 @@ router.delete('/meetings/:meetingId', authenticateUser, async (req, res) => {
         if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
         if (meeting.ownerId !== userId) return res.status(403).json({ error: 'Unauthorized' });
 
-        // Delete related MeetingUser entries first
-        await prisma.meetingUser.deleteMany({
-            where: { meetingId },
-        });
+        // Extract file URLs
+        const { recordingurl, transcripturl, summarizationurl } = meeting;
 
-        // Delete the meeting
-        await prisma.meeting.delete({
-            where: { id: meetingId },
-        });
+        // Function to delete an object from MinIO
+        const deleteMinIOObject = async (bucket, fileUrl) => {
+            if (!fileUrl) return;  // Skip if no file exists
 
-        return res.json({ message: 'Meeting deleted successfully' });
+            const filename = fileUrl.split('/').pop(); // Extract filename from URL
+
+            try {
+                await minioClient.removeObject(bucket, filename);
+                console.log(`Deleted ${filename} from ${bucket}`);
+            } catch (error) {
+                console.error(`Failed to delete ${filename} from ${bucket}:`, error);
+            }
+        };
+
+        // Delete files from MinIO
+        await Promise.all([
+            deleteMinIOObject(RECORDING_BUCKET_NAME, recordingurl),
+            deleteMinIOObject(TRANSCRIPTION_BUCKET_NAME, transcripturl),
+            deleteMinIOObject(SUMMARIZATION_BUCKET_NAME, summarizationurl)
+        ]);
+
+        // Delete meeting and associated records
+        await prisma.meetingUser.deleteMany({ where: { meetingId } }); // Remove meeting-user links
+        await prisma.meeting.delete({ where: { id: meetingId } }); // Delete meeting
+
+        return res.json({ message: 'Meeting and associated files deleted successfully' });
     } catch (error) {
         console.error('Database Error:', error);
         return res.status(500).json({ error: 'Failed to delete meeting' });
