@@ -23,51 +23,12 @@ const SUMMARIZATION_BUCKET_NAME = process.env.MINIO_SUMMARIZATION_BUCKET_NAME;
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Video Upload Route
-// router.post("/upload", upload.single("video"), async (req, res) => {
-//     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-//     const filename = req.file.originalname;
-//     console.log("File Name: ", filename);
-//     console.log("File Size: ", req.file.size);
-//     console.log("File Type: ", req.file.mimetype);
-
-//     try {
-//         await minioClient.putObject(
-//             MINIO_RECORDING_BUCKET_NAME,
-//             filename,
-//             req.file.buffer,
-//             req.file.size,
-//             { "Content-Type": req.file.mimetype }
-//         );
-
-//         return res.json({ message: "File uploaded successfully", filename });
-//     } catch (error) {
-//         console.error("MinIO Upload Error:", error);
-//         return res.status(500).json({ error: "Failed to upload file" });
-//     }
-// });
-
-// router.get("/getfile/:filename", async (req, res) => {
-//     const { filename } = req.params;
-
-//     try {
-//         const fileStream = await minioClient.getObject(BUCKET_NAME, filename);
-
-//         res.setHeader("Content-Type", "video/webm");
-//         fileStream.pipe(res);  // Stream the file to the response
-//     } catch (error) {
-//         console.error("MinIO Fetch Error:", error);
-//         return res.status(500).json({ error: "Failed to retrieve file" });
-//     }
-// });
-
 router.post("/upload-video", authenticateUser, upload.single("video"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const filename = `${req.file.originalname}`;
     const fileBuffer = req.file.buffer;
-    const userId = req.user.userId;
+    const userId = req.user.userId;  // Get the logged-in user's ID
 
     const { title } = req.body;
     console.log("Title : ", title);
@@ -83,19 +44,23 @@ router.post("/upload-video", authenticateUser, upload.single("video"), async (re
 
         const videoUrl = `${process.env.MINIO_PUBLIC_URL}/${RECORDING_BUCKET_NAME}/${filename}`;
 
+        // Create meeting with ownerId
         const meeting = await prisma.meeting.create({
             data: {
                 title: title,
                 recordingurl: videoUrl,
+                ownerId: userId,  // Assign the owner of the meeting
             },
         });
 
+        // Add the user to the MeetingUser table
         await prisma.meetingUser.create({
             data: {
                 userId,
                 meetingId: meeting.id,
             },
         });
+
         console.log("Recording uploaded successfully");
         return res.json({ message: "File uploaded successfully", videoUrl, meetingId: meeting.id });
     } catch (error) {
@@ -204,63 +169,23 @@ router.get("/meetings", async (req, res) => {
     }
 });
 
-// router.post('/grant-access', authenticateUser, async (req, res) => {
-//     const { emails, meetingId } = req.body;
-
-//     console.log("Emails received to grant access : ", emails);
-    
-//     if (!emails || !Array.isArray(emails) || emails.length === 0) {
-//         return res.status(400).json({ error: 'Emails array is required' });
-//     }
-
-//     try {
-//         const users = await prisma.user.findMany({
-//             where: { email: { in: emails } }
-//         });
-
-//         if (users.length === 0) {
-//             return res.status(404).json({ error: 'No users found with the provided emails' });
-//         }
-
-//         // Fetch existing meeting users
-//         const existingMeetingUsers = await prisma.meetingUser.findMany({
-//             where: { meetingId }
-//         });
-
-//         const existingUserIds = existingMeetingUsers.map(mu => mu.userId);
-
-//         // Filter out users who already have access
-//         const newUsers = users.filter(user => !existingUserIds.includes(user.id));
-
-//         if (newUsers.length === 0) {
-//             return res.status(400).json({ error: 'All provided users already have access' });
-//         }
-
-//         const meetingUsersData = newUsers.map(user => ({
-//             userId: user.id,
-//             meetingId
-//         }));
-
-//         await prisma.meetingUser.createMany({
-//             data: meetingUsersData,
-//             skipDuplicates: true
-//         });
-
-//         return res.json({ message: 'Access granted successfully' });
-//     } catch (error) {
-//         console.error('Database Error:', error);
-//         return res.status(500).json({ error: 'Failed to grant access' });
-//     }
-// });
-
 router.post('/grant-access', authenticateUser, async (req, res) => {
     const { emails, meetingId } = req.body;
+    const userId = req.user.userId;
 
     if (!emails || !Array.isArray(emails)) {
         return res.status(400).json({ error: 'Emails array is required' });
     }
 
     try {
+        // Fetch the meeting and check ownership
+        const meeting = await prisma.meeting.findUnique({
+            where: { id: meetingId },
+        });
+
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.ownerId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
         // Fetch users corresponding to the provided emails
         const users = await prisma.user.findMany({
             where: { email: { in: emails } },
@@ -366,8 +291,18 @@ router.get('/meetings/:meetingId', authenticateUser, async (req, res) => {
 router.put('/meetings/:meetingId', authenticateUser, async (req, res) => {
     const { meetingId } = req.params;
     const { title } = req.body;
+    const userId = req.user.userId; // Authenticated user's ID
 
     try {
+        // Fetch the meeting and check ownership
+        const meeting = await prisma.meeting.findUnique({
+            where: { id: meetingId },
+        });
+
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.ownerId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+        // Update the meeting title
         const updatedMeeting = await prisma.meeting.update({
             where: { id: meetingId },
             data: { title },
@@ -382,8 +317,17 @@ router.put('/meetings/:meetingId', authenticateUser, async (req, res) => {
 
 router.delete('/meetings/:meetingId', authenticateUser, async (req, res) => {
     const { meetingId } = req.params;
+    const userId = req.user.userId;
 
     try {
+        // Fetch the meeting and check ownership
+        const meeting = await prisma.meeting.findUnique({
+            where: { id: meetingId },
+        });
+
+        if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
+        if (meeting.ownerId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
         // Delete related MeetingUser entries first
         await prisma.meetingUser.deleteMany({
             where: { meetingId },
@@ -399,6 +343,6 @@ router.delete('/meetings/:meetingId', authenticateUser, async (req, res) => {
         console.error('Database Error:', error);
         return res.status(500).json({ error: 'Failed to delete meeting' });
     }
-}); 
+});
 
 module.exports = router;
