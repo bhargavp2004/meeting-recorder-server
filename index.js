@@ -2,8 +2,8 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
-const userRoutes = require('./routes/auth') 
-const mediaUploadRoutes = require('./routes/mediaUpload')
+const userRoutes = require('./routes/authRoutes');
+const mediaUploadRoutes = require('./routes/mediaRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
